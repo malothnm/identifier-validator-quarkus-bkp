@@ -1,0 +1,71 @@
+syntax = "proto3";
+
+option java_multiple_files = true;
+option java_package = "in.nmaloth.identifierValidator.model.proto.aggregator";
+option java_outer_classname = "ValidationResponseSummaryProto";
+
+package aggregator;
+
+message ValidationResponse {
+
+    string serviceId = 1;
+    repeated string validationResponse = 2;
+    map<string,string> serviceResponseFields = 3;
+
+}
+
+message ResponseElement{
+
+    int32 id = 1;
+    optional string dataSetId = 2;
+    optional string subElementId  = 3;
+    string elementPopulationLogic = 4;
+    string elementPresence = 5;
+
+    optional int32 intValue = 6;
+    optional int64 longValue = 7;
+    optional string stringValue = 8;
+    optional bytes  byteValue = 9;
+
+
+}
+
+message ResponseMessage {
+
+    bytes header = 1;
+    repeated ResponseElement elements = 2;
+
+}
+
+
+
+message ValidationResponseSummary {
+
+    string messageId = 1;
+    string messageTypeId = 2;
+    string aggregatorContainerId = 3;
+    string microServiceId = 4;
+    repeated ValidationResponse validationResponseList = 5;
+    ResponseMessage responseFields = 6;
+    optional RegistrationAggregator registration = 7;
+}
+
+message AggregatorResponse {
+    string messageId = 1;
+    bool completed = 2;
+    optional RegistrationAggregator registration = 7;
+
+}
+
+message  RegistrationAggregator {
+
+    string serviceName = 1;
+    string serviceInstance = 2;
+    optional string network = 3;
+}
+
+service AggregatorService {
+
+//    rpc Register (RegistrationAggregator) returns (RegistrationAggregator){}
+    rpc AggregatorStream ( stream AggregatorResponse) returns (stream ValidationResponseSummary) {}
+}

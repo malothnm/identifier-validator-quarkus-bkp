@@ -1,0 +1,91 @@
+syntax = "proto3";
+
+option java_multiple_files = true;
+option java_package = "in.nmaloth.identifierValidator.model.proto.identifier";
+option java_outer_classname = "IdentifierProto";
+
+package identifier;
+
+
+message IdentifierValidator {
+
+    string messageId = 1;
+    string messageTypeId = 2;
+    string containerId = 3;
+    string channelId = 4;
+    string aggregatorInstance = 5;
+    optional string cardNumber = 6;
+    optional string accountNumber = 7;
+    optional string instrument = 8;
+    optional string customerNumber= 9;
+    optional string address = 10;
+    optional string postalCode = 11;
+    optional string customerName = 12;
+    string avsType = 13;
+    optional int64 transactionAmount= 14;
+    optional int64 billingAmount = 15;
+    optional string transactionCurrencyCode = 16;
+    optional string billingCurrencyCode = 17;
+    optional string transactionType= 18;
+    optional string countryCode= 19;
+    optional string authorizationType = 20;
+    optional string installmentType = 21;
+    string cashBack = 22;
+    optional int64 cashBackAmount = 23;
+    optional string cardAcceptorId = 24;
+    optional string cardAcceptorTerminalID = 25;
+    optional string merchantName = 26;
+    optional string merchantCountry = 27;
+    optional string merchantState = 28;
+    optional string merchantCity = 29;
+    optional string merchantPostalCode = 30;
+    optional string acquirerId = 31;
+    optional string acquirerCountry = 32;
+    optional string merchantNumber = 33;
+    string terminalType = 34;
+    string recurringTrans = 35;
+    string purchaseTypes = 36;
+    string entryMode = 37;
+    optional string expiryDate = 38;
+    string international = 39;
+    optional string serviceResponse = 40;
+    optional string serviceId = 41;
+    optional string senderInstance = 42;
+    repeated string balanceTypes = 43;
+    repeated string limitTypes = 44;
+    string network = 46;
+    int32 criteria = 47;
+    string transactionCountryCode = 48;
+    optional string iad = 49;
+    optional string tvr = 50;
+    optional bool pinAvailable = 51;
+    int32  org = 52;
+    int32  product = 53;
+    int32  mcc = 54;
+    optional string settlementCurrCode = 55;
+
+    optional RegistrationIdentifier registration = 61;
+
+
+}
+
+message IdentifierResponse{
+
+    string messageId = 1;
+    bool completed = 2;
+    optional RegistrationIdentifier registration = 5;
+
+}
+
+message RegistrationIdentifier {
+
+    string serviceName = 1;
+    string serviceInstance = 2;
+
+}
+
+service IdentifierService {
+
+//    rpc register(RegistrationIdentifier) returns (RegistrationIdentifier) {}
+    rpc sendMessage (stream IdentifierResponse) returns (stream IdentifierValidator) {}
+}
