@@ -65,6 +65,8 @@ message IdentifierValidator {
     optional string settlementCurrCode = 55;
 
     optional RegistrationIdentifier registration = 61;
+    optional StatusUpdateIdentifier statusUpdateIdentifier = 62;
+
 
 
 }
@@ -74,6 +76,8 @@ message IdentifierResponse{
     string messageId = 1;
     bool completed = 2;
     optional RegistrationIdentifier registration = 5;
+    optional StatusUpdateIdentifier statusUpdateIdentifier = 8;
+
 
 }
 
@@ -81,6 +85,16 @@ message RegistrationIdentifier {
 
     string serviceName = 1;
     string serviceInstance = 2;
+
+}
+
+
+message StatusUpdateIdentifier {
+
+    string serviceName = 1;
+    string serviceInstance = 2;
+    string  identifier = 3;
+    bool  readyStatus = 4;
 
 }
 

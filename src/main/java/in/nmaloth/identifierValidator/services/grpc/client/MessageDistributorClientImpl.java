@@ -6,10 +6,7 @@ import in.nmaloth.identifierValidator.config.RequestNames;
 import in.nmaloth.identifierValidator.config.ServiceNames;
 import in.nmaloth.identifierValidator.listeners.MessageListener;
 import in.nmaloth.identifierValidator.listeners.MessageListenerImpl;
-import in.nmaloth.identifierValidator.model.proto.identifier.IdentifierResponse;
-import in.nmaloth.identifierValidator.model.proto.identifier.IdentifierValidator;
-import in.nmaloth.identifierValidator.model.proto.identifier.MutinyIdentifierServiceGrpc;
-import in.nmaloth.identifierValidator.model.proto.identifier.RegistrationIdentifier;
+import in.nmaloth.identifierValidator.model.proto.identifier.*;
 import in.nmaloth.identifierValidator.serviceEvents.model.ServiceAction;
 import in.nmaloth.identifierValidator.serviceEvents.model.ServiceEvent;
 import io.smallrye.mutiny.Multi;
@@ -49,6 +46,28 @@ public class MessageDistributorClientImpl implements MessageDistributorClient{
 
 
         client.sendMessage(getOutgoingResponseMulti(messageListener))
+                .onItem().invoke(identifierValidator -> {
+
+                    if (identifierValidator.hasRegistration()) {
+
+                        logger.info("###############????? : Server Registration Completed {}", identifierValidator.getRegistration().toString());
+                        messageListener.setServiceName(identifierValidator.getRegistration().getServiceName());
+                        messageListener.setServiceInstance(identifierValidator.getRegistration().getServiceInstance());
+
+                        eventProcessors.distributorProcessor.processMessage(IdentifierResponse.newBuilder()
+                                .setMessageId(UUID.randomUUID().toString().replace("-",""))
+                                .setStatusUpdateIdentifier(StatusUpdateIdentifier.newBuilder()
+                                        .setServiceInstance(eventProcessors.INSTANCE)
+                                        .setServiceName(ServiceNames.IDENTIFIER_SERVICE)
+                                        .setReadyStatus(true)
+                                        .build()).build(),identifierValidator.getRegistration().getServiceInstance())
+                        ;
+
+                    } else if(identifierValidator.hasStatusUpdateIdentifier()){
+                        eventProcessors.distributorProcessor.updateReadyStatus(identifierValidator.getStatusUpdateIdentifier().getServiceInstance(),
+                                identifierValidator.getStatusUpdateIdentifier().getServiceName(), identifierValidator.getStatusUpdateIdentifier().getReadyStatus());
+                    }
+                })
                 .onFailure().retry().atMost(1L)
                 .onFailure().recoverWithMulti(() -> {
                     logger.info(" ################ Entered Termination");
@@ -67,26 +86,19 @@ public class MessageDistributorClientImpl implements MessageDistributorClient{
                     logger.info(" Terminated Connection for Service {} Instance {} ", serviceEvent.getServiceName(), serviceEvent.getInstance());
                     eventBus.send(EventBusNames.SERVICE_EVENTS, serviceEvent1);
 
-                })
+                }).filter(identifierValidator -> !(identifierValidator.hasRegistration() || identifierValidator.hasStatusUpdateIdentifier()))
 
                 .subscribe().with(identifierValidator -> {
-                    if (identifierValidator.hasRegistration()) {
 
-                        logger.info("###############????? : Server Registration Completed {}", identifierValidator.getRegistration().toString());
-                        messageListener.setServiceName(identifierValidator.getRegistration().getServiceName());
-                        messageListener.setServiceInstance(identifierValidator.getRegistration().getServiceInstance());
-
-                    } else {
                         eventBus.send(EventBusNames.PROCESS_MESSAGE, identifierValidator);
+//
+//                        eventProcessors.distributorProcessor.processMessage(IdentifierResponse.newBuilder()
+//                                .setMessageId(identifierValidator.getMessageId())
+//                                .setCompleted(true)
+//                                .build(),messageListener.getServiceInstance()
+//                        );
 
-                        eventProcessors.distributorProcessor.processMessage(IdentifierResponse.newBuilder()
-                                .setMessageId(identifierValidator.getMessageId())
-                                .setCompleted(true)
-                                .build(),messageListener.getServiceInstance()
-                        );
 
-
-                    }
                 });
 
 

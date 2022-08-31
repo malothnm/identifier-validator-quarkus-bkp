@@ -2,10 +2,7 @@ package in.nmaloth.testResource;
 
 import in.nmaloth.identifierValidator.config.ServiceNames;
 import in.nmaloth.identifierValidator.listeners.MessageListener;
-import in.nmaloth.identifierValidator.model.proto.identifier.IdentifierResponse;
-import in.nmaloth.identifierValidator.model.proto.identifier.IdentifierValidator;
-import in.nmaloth.identifierValidator.model.proto.identifier.MutinyIdentifierServiceGrpc;
-import in.nmaloth.identifierValidator.model.proto.identifier.RegistrationIdentifier;
+import in.nmaloth.identifierValidator.model.proto.identifier.*;
 import in.nmaloth.identifierValidator.processors.EventOutgoingProcessor;
 import io.smallrye.mutiny.Multi;
 import org.slf4j.Logger;
@@ -39,13 +36,13 @@ public class IdentifierServiceGrpc extends MutinyIdentifierServiceGrpc.Identifie
     @Override
     public Multi<IdentifierValidator> sendMessage(Multi<IdentifierResponse> request) {
 
-        request.onItem().invoke(outgoingResponse -> {
+        request.onItem().invoke(identifierResponse -> {
 
             logger.info(" ######################### Entered here ");
-            logger.info(outgoingResponse.toString());
-            if (outgoingResponse.hasRegistration()) {
-                messageListener.setServiceInstance(outgoingResponse.getRegistration().getServiceInstance());
-                messageListener.setServiceName(outgoingResponse.getRegistration().getServiceName());
+            logger.info(identifierResponse.toString());
+            if (identifierResponse.hasRegistration()) {
+                messageListener.setServiceInstance(identifierResponse.getRegistration().getServiceInstance());
+                messageListener.setServiceName(identifierResponse.getRegistration().getServiceName());
 
 
                 IdentifierValidator identifierValidator = IdentifierValidator.newBuilder()
@@ -55,9 +52,23 @@ public class IdentifierServiceGrpc extends MutinyIdentifierServiceGrpc.Identifie
                                 .setServiceName(ServiceNames.DISTRIBUTOR)
                                 .build())
                         .build();
-                eventOutgoingProcessor.processMessage(identifierValidator);
+                eventOutgoingProcessor.processMessage(identifierValidator,identifierResponse.getRegistration().getServiceInstance());
+
+                eventOutgoingProcessor.processMessage(IdentifierValidator.newBuilder()
+                        .setMessageId(UUID.randomUUID().toString().replace("-",""))
+                        .setStatusUpdateIdentifier(StatusUpdateIdentifier.newBuilder()
+                                .setServiceInstance(instance)
+                                .setServiceName(ServiceNames.DISTRIBUTOR)
+                                .setReadyStatus(true)
+                                .build())
+                        .build(), identifierResponse.getRegistration().getServiceInstance());
+
+            } else  if( identifierResponse.hasStatusUpdateIdentifier()){
+                eventOutgoingProcessor.updateReadyStatus(identifierResponse.getStatusUpdateIdentifier().getServiceInstance(),
+                        identifierResponse.getStatusUpdateIdentifier().getServiceName(),identifierResponse.getStatusUpdateIdentifier().getReadyStatus());
+
             } else {
-                identifierResponseList.add(outgoingResponse);
+                identifierResponseList.add(identifierResponse);
             }
 
 

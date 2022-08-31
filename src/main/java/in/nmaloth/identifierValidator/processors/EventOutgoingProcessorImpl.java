@@ -19,6 +19,8 @@ public class EventOutgoingProcessorImpl<T> implements EventOutgoingProcessor<T> 
     private List<MessageListener<T>> messageListenerList = new ArrayList<>();
     private AtomicInteger roundRobin = new AtomicInteger(0);
 
+    private boolean readyForProcessing;
+
 
     @Override
     public void registerFluxListeners(MessageListener<T> messageListener, String serviceInstance, String serviceName) {
@@ -27,6 +29,71 @@ public class EventOutgoingProcessorImpl<T> implements EventOutgoingProcessor<T> 
         messageListener.setServiceName(serviceName);
         messageListenerList.add(messageListener);
 
+    }
+
+
+
+    @Override
+    public void updateReadyStatus(String serviceInstance, String serviceName,boolean status) {
+
+        for ( MessageListener<T> messageListener: messageListenerList) {
+
+            if(messageListener.getServiceInstance().equals(serviceInstance) && messageListener.getServiceName().equals(serviceName)){
+                messageListener.setReadyStatus(status);
+                break;
+            }
+
+        }
+
+        checkForProcessingStatus();
+    }
+
+    @Override
+    public boolean getReadyStatus() {
+        return readyForProcessing;
+    }
+
+    @Override
+    public Optional<String> fetchNextInstance() {
+
+        if(!readyForProcessing){
+            return Optional.empty();
+        }
+
+        Optional<MessageListener<T>> messageListenerOptional = Optional.empty();
+        boolean notProcessedMessage = true;
+
+        do {
+            messageListenerOptional = selectListener();
+
+            if(messageListenerOptional.isPresent()){
+                try {
+                    notProcessedMessage = true;
+
+
+                    MessageListener<T> messageListener = messageListenerOptional.get();
+                    if(messageListener.getEmitter().isCancelled()){
+                        messageListenerList.remove(messageListener);
+                        checkForProcessingStatus();
+                    } else {
+
+                        if(messageListener.getServiceInstance() != null && messageListener.getReadyStatus()){
+                            return Optional.of(messageListenerOptional.get().getServiceInstance());
+                        }
+                    }
+                } catch (Exception ex){
+                    ex.printStackTrace();
+                }
+            }
+        }
+        while ( messageListenerOptional.isPresent() && messageListenerOptional.get().getEmitter() != null &&
+                notProcessedMessage);
+
+        if(messageListenerOptional.isEmpty()){
+            log.info(" No Active Flux ...");
+
+        }
+        return Optional.empty();
     }
 
     @Override
@@ -46,7 +113,26 @@ public class EventOutgoingProcessorImpl<T> implements EventOutgoingProcessor<T> 
             messageListenerList.remove(messageListenerOptional.get());
         }
 
+        checkForProcessingStatus();
 
+
+    }
+
+    public void checkForProcessingStatus() {
+        boolean readyToProcess = false;
+        for (MessageListener<T> messageListener: messageListenerList) {
+
+            if(messageListener.getReadyStatus()){
+                readyToProcess = true;
+                break;
+            }
+        }
+
+        if(readyToProcess){
+            this.readyForProcessing = true;
+        } else {
+            this.readyForProcessing = false;
+        }
     }
 
     @Override
@@ -60,40 +146,59 @@ public class EventOutgoingProcessorImpl<T> implements EventOutgoingProcessor<T> 
             messageListenerList.remove(messageListenerOptional.get());
         }
 
+        log.info(" ############### Removing Listeners  {}",messageListener.toString());
+
+
 
     }
 
     @Override
     public void processMessage(T message) {
 
+        if(!readyForProcessing){
+            return;
+        }
+
         Optional<MessageListener<T>> messageListenerOptional = Optional.empty();
+        boolean notProcessedMessage = true;
+
         do {
             messageListenerOptional = selectListener();
 
             if(messageListenerOptional.isPresent()){
                 try {
-                    messageListenerOptional.get().processMessage(message);
+                    notProcessedMessage = true;
+
+
+                    MessageListener<T> messageListener = messageListenerOptional.get();
+                    if(messageListener.getEmitter().isCancelled()){
+                        messageListenerList.remove(messageListener);
+                        checkForProcessingStatus();
+                    } else {
+
+                        if(messageListener.getServiceInstance() != null && messageListener.getReadyStatus()){
+                            messageListenerOptional.get().processMessage(message);
+                            notProcessedMessage = false;
+                        }
+                    }
                 } catch (Exception ex){
                     ex.printStackTrace();
                 }
             }
         }
         while ( messageListenerOptional.isPresent() && messageListenerOptional.get().getEmitter() != null &&
-                messageListenerOptional.get().getEmitter().isCancelled());
+                notProcessedMessage);
 
         if(messageListenerOptional.isEmpty()){
             log.info(" No Active Flux ...");
 
-            // Strategy to Write to  Geode backup
         }
-
-
-
 
     }
 
 
-    private Optional<MessageListener<T>> selectListener(){
+    @Override
+    public Optional<MessageListener<T>> selectListener(){
         int size = messageListenerList.size();
         if(size > 0 ){
             int roundRobin = this.roundRobin.incrementAndGet();
@@ -101,9 +206,15 @@ public class EventOutgoingProcessorImpl<T> implements EventOutgoingProcessor<T> 
             if(roundRobin > 99999){
                 this.roundRobin = new AtomicInteger(0);
             }
+
             return Optional.ofNullable(messageListenerList.get(selectedListener));
         }
         return Optional.empty();
+    }
+
+    @Override
+    public List<MessageListener<T>> getAllMessageListeners() {
+        return messageListenerList;
     }
 
 
@@ -134,8 +245,8 @@ public class EventOutgoingProcessorImpl<T> implements EventOutgoingProcessor<T> 
             return false;
         }
 
-
     }
+
 
 
     private Optional<MessageListener<T>> fetchOutgoingListenerInfo(String instance) {

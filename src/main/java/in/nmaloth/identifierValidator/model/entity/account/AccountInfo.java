@@ -14,7 +14,7 @@ import java.util.HashMap;
 import java.util.Map;
 import java.util.Optional;
 
-@MongoEntity(collection = "account")
+@MongoEntity(collection = "account",database = "auth")
 public class AccountInfo extends ReactivePanacheMongoEntity {
 
     @BsonProperty("account_id")

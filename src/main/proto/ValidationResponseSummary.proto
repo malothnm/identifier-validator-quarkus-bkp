@@ -48,12 +48,29 @@ message ValidationResponseSummary {
     repeated ValidationResponse validationResponseList = 5;
     ResponseMessage responseFields = 6;
     optional RegistrationAggregator registration = 7;
+    optional string channelId = 8;
+//    optional ARQCData arqcData = 9;
+    optional StatusUpdateAggregator statusUpdateAggregator = 10;
+
+}
+
+
+
+message StatusUpdateAggregator {
+
+    string serviceName = 1;
+    string serviceInstance = 2;
+    string  identifier = 3;
+    bool  readyStatus = 4;
+
 }
 
 message AggregatorResponse {
     string messageId = 1;
     bool completed = 2;
     optional RegistrationAggregator registration = 7;
+    optional StatusUpdateAggregator statusUpdateAggregator = 8;
+
 
 }
 

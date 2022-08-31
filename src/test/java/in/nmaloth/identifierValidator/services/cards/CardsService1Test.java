@@ -3,6 +3,7 @@ package in.nmaloth.identifierValidator.services.cards;
 import in.nmaloth.identifierValidator.model.ProductCriteria;
 import in.nmaloth.identifierValidator.model.entity.card.CardsBasic;
 import in.nmaloth.identifierValidator.model.entity.card.PeriodicCardAmount;
+import in.nmaloth.identifierValidator.model.entity.product.BlockingValue;
 import in.nmaloth.identifierValidator.model.entity.product.MCCRange;
 import in.nmaloth.identifierValidator.model.entity.product.ProductAuthCriteria;
 import in.nmaloth.identifierValidator.model.entity.product.ProductAuthCriteriaKey;
@@ -31,6 +32,7 @@ import org.slf4j.LoggerFactory;
 import javax.inject.Inject;
 import java.time.LocalDateTime;
 import java.util.*;
+import java.util.stream.Collectors;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -2371,7 +2373,7 @@ public class CardsService1Test {
 
     private ProductAuthCriteria createProductAuthCriteria(Integer org, Integer product,
                                                           Integer criteria,
-                                                          IncludeExclude includeExclude, Map<PeriodicType, Map<LimitType, PeriodicCardAmount>> periodicTypeMapMap, Strategy strategy) {
+                                                          IncludeExclude includeExclude, Map<String, Map<String, PeriodicCardAmount>> periodicTypeMapMap, Strategy strategy) {
 
         ProductAuthCriteriaKey productAuthCriteriaKey = ProductAuthCriteriaKey.builder()
                 .org(org)
@@ -2434,80 +2436,155 @@ public class CardsService1Test {
                 .build());
 
 
-        ProductAuthCriteria.ProductAuthCriteriaBuilder builder =
-                ProductAuthCriteria.builder()
-                        .org(org)
-                        .product(product)
-                        .criteria(criteria)
-                        .strategy(strategy)
-                ;
+        ProductAuthCriteria productAuthCriteria  = new ProductAuthCriteria();
+        productAuthCriteria.setOrg(org);
+        productAuthCriteria.setProduct(product);
+        productAuthCriteria.setCriteria(criteria);
+        productAuthCriteria.setStrategy(strategy.getStrategy());
 
         if(periodicTypeMapMap != null){
-            builder.cardLimitMap(periodicTypeMapMap);
+            productAuthCriteria.setCardLimitMap(periodicTypeMapMap);
         }
 
         if (includeExclude.equals(IncludeExclude.EXCLUDE)) {
 
-            builder
-                    .blockingCountries(IncludeExclude.EXCLUDE)
-                    .countryCodesBlocked(countriesList)
-                    .blockingCurrency(IncludeExclude.EXCLUDE)
-                    .currencyCodesBlocked(currenciesList)
-                    .blockingStates(IncludeExclude.EXCLUDE)
-                    .stateCodesBlocked(new ArrayList<>())
-                    .blockingMCC(IncludeExclude.EXCLUDE)
-                    .mccBlocked(mccRangeList)
-                    .blockingLimitTypes(IncludeExclude.EXCLUDE)
-                    .limitTypesBlocked(limitTypeList)
-                    .blockingPurchaseTypes(IncludeExclude.EXCLUDE)
-                    .purchaseTypesBlocked(purchaseTypesList)
-                    .blockingBalanceTypes(IncludeExclude.EXCLUDE)
-                    .balanceTypesBlocked(blockingBalanceTypeList)
-                    .blockingTransactionTypes(IncludeExclude.EXCLUDE)
-                    .transactionTypesBlocked(blockingTransactionTypeList)
-                    .blockTerminalTypes(IncludeExclude.EXCLUDE)
-                    .terminalTypesBlocked(terminalTypeList)
-            ;
+            productAuthCriteria.setBlockingCountries(IncludeExclude.EXCLUDE.getIncludeExclude());
+            productAuthCriteria.setCountryCodesBlocked(countriesList);
+            productAuthCriteria.setBlockingCurrency(IncludeExclude.EXCLUDE.getIncludeExclude());
+            productAuthCriteria.setCurrencyCodesBlocked(currenciesList);
+            productAuthCriteria.setBlockingStates(IncludeExclude.EXCLUDE.getIncludeExclude());
+            productAuthCriteria.setStateCodesBlocked(new ArrayList<>());
+            productAuthCriteria.setBlockingMCC(IncludeExclude.EXCLUDE.getIncludeExclude());
+            productAuthCriteria.setMccBlocked(mccRangeList);
+            productAuthCriteria.setBlockingLimitTypes(IncludeExclude.EXCLUDE.getIncludeExclude());
+            productAuthCriteria.setLimitTypesBlocked(createBlockingValueLimits(limitTypeList));
+            productAuthCriteria.setBlockingPurchaseTypes(IncludeExclude.EXCLUDE.getIncludeExclude());
+            productAuthCriteria.setPurchaseTypesBlocked(createBlockingValuePurchase(purchaseTypesList));
+            productAuthCriteria.setBlockingBalanceTypes(IncludeExclude.EXCLUDE.getIncludeExclude());
+            productAuthCriteria.setBalanceTypesBlocked(createBlockingValueBalance(blockingBalanceTypeList));
+            productAuthCriteria.setBlockingTransactionTypes(IncludeExclude.EXCLUDE.getIncludeExclude());
+            productAuthCriteria.setTransactionTypesBlocked(createBlockingValueTransaction(blockingTransactionTypeList));
+            productAuthCriteria.setBlockTerminalTypes(IncludeExclude.EXCLUDE.getIncludeExclude());
+            productAuthCriteria.setTerminalTypesBlocked(createBlockingValueTerminal(terminalTypeList));
+
+
         } else if (includeExclude.equals(IncludeExclude.INCLUDE)) {
 
-            builder
-                    .blockingCountries(IncludeExclude.INCLUDE)
-                    .countryCodesBlocked(countriesList)
-                    .blockingCurrency(IncludeExclude.INCLUDE)
-                    .currencyCodesBlocked(currenciesList)
-                    .blockingStates(IncludeExclude.INCLUDE)
-                    .stateCodesBlocked(new ArrayList<>())
-                    .blockingMCC(IncludeExclude.INCLUDE)
-                    .mccBlocked(mccRangeList)
-                    .blockingLimitTypes(IncludeExclude.INCLUDE)
-                    .limitTypesBlocked(limitTypeList)
-                    .blockingPurchaseTypes(IncludeExclude.INCLUDE)
-                    .purchaseTypesBlocked(purchaseTypesList)
-                    .blockingBalanceTypes(IncludeExclude.INCLUDE)
-                    .balanceTypesBlocked(blockingBalanceTypeList)
-                    .blockingTransactionTypes(IncludeExclude.INCLUDE)
-                    .transactionTypesBlocked(blockingTransactionTypeList)
-                    .blockTerminalTypes(IncludeExclude.INCLUDE)
-                    .terminalTypesBlocked(terminalTypeList)
-            ;
+            productAuthCriteria.setBlockingCountries(IncludeExclude.INCLUDE.getIncludeExclude());
+            productAuthCriteria.setCountryCodesBlocked(countriesList);
+            productAuthCriteria.setBlockingCurrency(IncludeExclude.INCLUDE.getIncludeExclude());
+            productAuthCriteria.setCurrencyCodesBlocked(currenciesList);
+            productAuthCriteria.setBlockingStates(IncludeExclude.INCLUDE.getIncludeExclude());
+            productAuthCriteria.setStateCodesBlocked(new ArrayList<>());
+            productAuthCriteria.setBlockingMCC(IncludeExclude.INCLUDE.getIncludeExclude());
+            productAuthCriteria.setMccBlocked(mccRangeList);
+            productAuthCriteria.setBlockingLimitTypes(IncludeExclude.INCLUDE.getIncludeExclude());
+            productAuthCriteria.setLimitTypesBlocked(createBlockingValueLimits(limitTypeList));
+            productAuthCriteria.setBlockingPurchaseTypes(IncludeExclude.INCLUDE.getIncludeExclude());
+            productAuthCriteria.setPurchaseTypesBlocked(createBlockingValuePurchase(purchaseTypesList));
+            productAuthCriteria.setBlockingBalanceTypes(IncludeExclude.INCLUDE.getIncludeExclude());
+            productAuthCriteria.setBalanceTypesBlocked(createBlockingValueBalance(blockingBalanceTypeList));
+            productAuthCriteria.setBlockingTransactionTypes(IncludeExclude.INCLUDE.getIncludeExclude());
+            productAuthCriteria.setTransactionTypesBlocked(createBlockingValueTransaction(blockingTransactionTypeList));
+            productAuthCriteria.setBlockTerminalTypes(IncludeExclude.INCLUDE.getIncludeExclude());
+            productAuthCriteria.setTerminalTypesBlocked(createBlockingValueTerminal(terminalTypeList));
+
+
         } else {
 
-            builder
-                    .blockingCountries(IncludeExclude.NOT_APPLICABLE)
-                    .blockingCurrency(IncludeExclude.NOT_APPLICABLE)
-                    .blockingStates(IncludeExclude.NOT_APPLICABLE)
-                    .blockingMCC(IncludeExclude.NOT_APPLICABLE)
-                    .blockingLimitTypes(IncludeExclude.NOT_APPLICABLE)
-                    .blockingPurchaseTypes(IncludeExclude.NOT_APPLICABLE)
-                    .blockingBalanceTypes(IncludeExclude.NOT_APPLICABLE)
-                    .blockingTransactionTypes(IncludeExclude.NOT_APPLICABLE)
-                    .blockTerminalTypes(IncludeExclude.NOT_APPLICABLE)
+            productAuthCriteria.setBlockingCountries(IncludeExclude.NOT_APPLICABLE.getIncludeExclude());
+            productAuthCriteria.setBlockingCurrency(IncludeExclude.NOT_APPLICABLE.getIncludeExclude());
+            productAuthCriteria.setBlockingStates(IncludeExclude.NOT_APPLICABLE.getIncludeExclude());
+            productAuthCriteria.setBlockingMCC(IncludeExclude.NOT_APPLICABLE.getIncludeExclude());
+            productAuthCriteria.setBlockingLimitTypes(IncludeExclude.NOT_APPLICABLE.getIncludeExclude());
+            productAuthCriteria.setBlockingPurchaseTypes(IncludeExclude.NOT_APPLICABLE.getIncludeExclude());
+            productAuthCriteria.setBlockingBalanceTypes(IncludeExclude.NOT_APPLICABLE.getIncludeExclude());
+            productAuthCriteria.setBlockingTransactionTypes(IncludeExclude.NOT_APPLICABLE.getIncludeExclude());
+            productAuthCriteria.setBlockTerminalTypes(IncludeExclude.NOT_APPLICABLE.getIncludeExclude())
             ;
+
         }
 
-        return builder.build();
+        return productAuthCriteria;
 
 
+    }
+
+
+    private BlockingValue createBlockingValue(String international, String value){
+
+        BlockingValue blockingValue = new BlockingValue();
+        blockingValue.setInternationalApplied(international);
+        blockingValue.setValue(value);
+        return blockingValue;
+    }
+
+
+    private List<BlockingValue> createBlockingValueLimits(List<BlockingLimitType> blockingLimitTypeList){
+
+        return blockingLimitTypeList.stream()
+                .map(blockingLimitType -> {
+                    BlockingValue blockingValue = new BlockingValue();
+                    blockingValue.setValue(blockingLimitType.getLimitType());
+                    blockingValue.setInternationalApplied(blockingLimitType.getInternationalApplied());
+                    return blockingValue;
+                })
+                .collect(Collectors.toList())
+                ;
+    }
+
+    private List<BlockingValue> createBlockingValuePurchase(List<BlockingPurchaseType> blockingPurchaseTypeList){
+
+        return blockingPurchaseTypeList.stream()
+                .map(blockingPurchaseType -> {
+                    BlockingValue blockingValue = new BlockingValue();
+                    blockingValue.setValue(blockingPurchaseType.getPurchaseTypes());
+                    blockingValue.setInternationalApplied(blockingPurchaseType.getInternationalApplied());
+                    return blockingValue;
+                })
+                .collect(Collectors.toList())
+                ;
+    }
+
+
+    private List<BlockingValue> createBlockingValueBalance(List<BlockingBalanceType> blockingBalanceTypes){
+
+        return blockingBalanceTypes.stream()
+                .map(blockingBalanceType -> {
+                    BlockingValue blockingValue = new BlockingValue();
+                    blockingValue.setValue(blockingBalanceType.getBalanceTypes());
+                    blockingValue.setInternationalApplied(blockingBalanceType.getInternationalApplied());
+                    return blockingValue;
+                })
+                .collect(Collectors.toList())
+                ;
+    }
+
+
+    private List<BlockingValue> createBlockingValueTerminal(List<BlockingTerminalType> blockingTerminalTypes){
+
+        return blockingTerminalTypes.stream()
+                .map(blockingTerminalType -> {
+                    BlockingValue blockingValue = new BlockingValue();
+                    blockingValue.setValue(blockingTerminalType.getTerminalType());
+                    blockingValue.setInternationalApplied(blockingTerminalType.getInternationalApplied());
+                    return blockingValue;
+                })
+                .collect(Collectors.toList())
+                ;
+    }
+
+    private List<BlockingValue> createBlockingValueTransaction(List<BlockingTransactionType> blockingTransactionTypes){
+
+        return blockingTransactionTypes.stream()
+                .map(blockingTransactionType -> {
+                    BlockingValue blockingValue = new BlockingValue();
+                    blockingValue.setValue(blockingTransactionType.getTransactionType());
+                    blockingValue.setInternationalApplied(blockingTransactionType.getInternationalApplied());
+                    return blockingValue;
+                })
+                .collect(Collectors.toList())
+                ;
     }
 
 
@@ -2519,7 +2596,7 @@ public class CardsService1Test {
         limitTypeList.forEach(limitType -> limitAmountMap.put(limitType,PeriodicCardAmount.builder()
                 .transactionNumber(Double.valueOf(count*percent).intValue())
                 .transactionAmount(Double.valueOf(amount*percent).longValue())
-                .limitType(LimitType.CASH)
+                .limitType(limitType)
                 .build()));
 
         return limitAmountMap;

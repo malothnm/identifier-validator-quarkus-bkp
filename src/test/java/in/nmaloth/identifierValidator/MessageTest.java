@@ -8,6 +8,7 @@ import in.nmaloth.identifierValidator.model.entity.card.CardsBasic;
 import in.nmaloth.identifierValidator.model.entity.card.PeriodicCardAmount;
 import in.nmaloth.identifierValidator.model.entity.customer.CustomerDef;
 import in.nmaloth.identifierValidator.model.entity.global.CurrencyConversionTable;
+import in.nmaloth.identifierValidator.model.entity.product.BlockingValue;
 import in.nmaloth.identifierValidator.model.entity.product.MCCRange;
 import in.nmaloth.identifierValidator.model.entity.product.ProductAuthCriteria;
 import in.nmaloth.identifierValidator.model.entity.product.ProductAuthCriteriaKey;
@@ -29,6 +30,7 @@ import in.nmaloth.payments.constants.ids.ServiceID;
 import in.nmaloth.payments.constants.instrument.CVM;
 import in.nmaloth.payments.constants.network.NetworkType;
 import in.nmaloth.payments.constants.products.*;
+import in.nmaloth.testResource.AggregatorClient;
 import in.nmaloth.testResource.ConnectionServer;
 import in.nmaloth.testResource.GRPCWireResource;
 import in.nmaloth.testResource.InjectConnectionServer;
@@ -79,21 +81,16 @@ public class MessageTest {
 
     RegistrationAggregator registrationAggregator;
 
-    private List<ValidationResponseSummary> validationResponseSummaryList = new ArrayList<>();
+
+    private static  final AggregatorClient aggregatorClient = new AggregatorClient();
 
 
-
-    private final String aggregatorInstance = UUID.randomUUID().toString().replace("-","");
-    private final String distributorInstance = UUID.randomUUID().toString().replace("-","");
-
-    MultiEmitter<? super AggregatorResponse> aggregatorResponseMultiEmitter;
-
-    boolean initialConnect = true;
+    private static boolean initialConnect = true;
 
 
 
     @BeforeEach
-    void setUp(){
+    void setUp() throws InterruptedException {
 
         Uni<List<ProductAuthCriteria>> productAuthCriteriaUni = ProductAuthCriteria.listAll();
         productAuthCriteriaUni.await().indefinitely()
@@ -104,7 +101,8 @@ public class MessageTest {
 
             initialConnect = false;
 
-            createAggregatorStream();
+            aggregatorClient.createAggregatorResponseStream("localhost",9001);
+            Thread.sleep(1000);
 
             List<CurrencyConversionTable> currencyConversionTableList = new ArrayList<>();
             currencyConversionTableList.add(buildCurrencyTable("124","840",500000L, LocalDate.now(), NetworkType.VISA_VIP));
@@ -133,13 +131,17 @@ public class MessageTest {
                         .map(tuple2-> tuple2.getItem1())
                                 .collect(Collectors.toList()).toArray(new String[0]);
 
-        String[] testArray = new String[]{ServiceNames.DISTRIBUTOR, ServiceNames.DISTRIBUTOR};
+        String[] testArray = new String[]{ServiceNames.DISTRIBUTOR};
 
         assertAll(
                 ()-> assertNotNull(connectionServer.messageListener.getServiceInstance()),
                 ()-> assertEquals(ServiceNames.IDENTIFIER_SERVICE,connectionServer.messageListener.getServiceName()),
-                ()-> assertEquals(2, distributorList.size()),
-                ()-> assertArrayEquals(testArray,stringArray)
+                ()-> assertTrue(connectionServer.distributorProcessor.getReadyStatus()),
+                ()-> assertEquals(eventProcessors.INSTANCE, connectionServer.messageListener.getServiceInstance()),
+                ()-> assertEquals(1, distributorList.size()),
+                ()-> assertArrayEquals(testArray,stringArray),
+                ()-> assertEquals(connectionServer.instance,eventProcessors.distributorProcessor.getAllMessageListeners().get(0).getServiceInstance()),
+                ()-> assertTrue(eventProcessors.distributorProcessor.getReadyStatus())
 
         );
     }
@@ -168,7 +170,7 @@ public class MessageTest {
 
 
         IdentifierValidator identifierValidator =
-                createIdentifierValidator(containerId,accountId,cardId,instrument,customerId,aggregatorInstance,
+                createIdentifierValidator(containerId,accountId,cardId,instrument,customerId,aggregatorClient.INSTANCE,
                         TransactionType.ACCOUNT_FUND_TRANSACTION,
                         InstallmentType.INSTALLMENT_TYPE,
                         CashBack.NO_CASH_BACK,
@@ -183,14 +185,14 @@ public class MessageTest {
 
         connectionServer.distributorProcessor.processMessage(identifierValidator);
 
-        Thread.sleep(100);
+        Thread.sleep(1000);
 
-        Optional<IdentifierResponse> identifierResponseOptional = connectionServer.distributorResponseList.stream().filter(identifierResponse -> identifierResponse.getMessageId().equals(identifierValidator.getMessageId())).findFirst();
+        Optional<ValidationResponseSummary> validationResponseSummaryOptional = aggregatorClient.validationSummaryMessageList.stream().filter(identifierResponse -> identifierResponse.getMessageId().equals(identifierValidator.getMessageId())).findFirst();
 
         byte[] messages = backupCache.get(identifierValidator.getMessageId());
 
         assertAll(
-                ()-> assertTrue(identifierResponseOptional.isPresent()),
+                ()-> assertTrue(validationResponseSummaryOptional.isPresent()),
                 ()-> assertNotNull(messages)
 
 
@@ -286,7 +288,7 @@ public class MessageTest {
 
 
         IdentifierValidator identifierValidator =
-                createIdentifierValidator(containerId,accountId,cardId,instrument,customerId,aggregatorInstance,
+                createIdentifierValidator(containerId,accountId,cardId,instrument,customerId,aggregatorClient.INSTANCE,
                         TransactionType.ACCOUNT_FUND_TRANSACTION,
                         InstallmentType.INSTALLMENT_TYPE,
                         CashBack.NO_CASH_BACK,
@@ -303,7 +305,7 @@ public class MessageTest {
 
         Thread.sleep(500);
 
-        Optional<ValidationResponseSummary> validationResponseSummaryOptional = validationResponseSummaryList.stream()
+        Optional<ValidationResponseSummary> validationResponseSummaryOptional = aggregatorClient.validationSummaryMessageList.stream()
                         .filter(validationResponseSummary -> validationResponseSummary.getMessageId().equals(identifierValidator.getMessageId()))
                                 .findFirst();
 
@@ -329,7 +331,7 @@ public class MessageTest {
                 ()-> assertEquals(identifierValidator.getMessageId(),validationResponseSummary.getMessageId()),
                 ()-> assertEquals(ServiceNames.IDENTIFIER_SERVICE,validationResponseSummary.getMicroServiceId()),
                 ()-> assertEquals(identifierValidator.getAggregatorInstance(),validationResponseSummary.getAggregatorContainerId()),
-                ()-> assertEquals(2, validationResponseSummary.getValidationResponseListCount()),
+                ()-> assertEquals(3, validationResponseSummary.getValidationResponseListCount()),
                 ()-> assertEquals(1,validationResponseAccount.getValidationResponseCount()),
                 ()-> assertEquals(ServiceResponse.OK.getServiceResponse(),validationResponseAccount.getValidationResponse(0)),
 
@@ -431,7 +433,7 @@ public class MessageTest {
 
 
         IdentifierValidator identifierValidator =
-                createIdentifierValidator(containerId,accountId,cardId,instrument,customerId,aggregatorInstance,
+                createIdentifierValidator(containerId,accountId,cardId,instrument,customerId,aggregatorClient.INSTANCE,
                         TransactionType.ACCOUNT_FUND_TRANSACTION,
                         InstallmentType.INSTALLMENT_TYPE,
                         CashBack.NO_CASH_BACK,
@@ -448,7 +450,7 @@ public class MessageTest {
 
         Thread.sleep(500);
 
-        Optional<ValidationResponseSummary> validationResponseSummaryOptional = validationResponseSummaryList.stream()
+        Optional<ValidationResponseSummary> validationResponseSummaryOptional = aggregatorClient.validationSummaryMessageList.stream()
                 .filter(validationResponseSummary -> validationResponseSummary.getMessageId().equals(identifierValidator.getMessageId()))
                 .findFirst();
 
@@ -579,7 +581,7 @@ public class MessageTest {
 
 
         IdentifierValidator identifierValidator =
-                createIdentifierValidator(containerId,accountId,cardId,instrument,customerId,aggregatorInstance,
+                createIdentifierValidator(containerId,accountId,cardId,instrument,customerId,aggregatorClient.INSTANCE,
                         TransactionType.ACCOUNT_FUND_TRANSACTION,
                         InstallmentType.INSTALLMENT_TYPE,
                         CashBack.NO_CASH_BACK,
@@ -596,7 +598,7 @@ public class MessageTest {
 
         Thread.sleep(500);
 
-        Optional<ValidationResponseSummary> validationResponseSummaryOptional = validationResponseSummaryList.stream()
+        Optional<ValidationResponseSummary> validationResponseSummaryOptional = aggregatorClient.validationSummaryMessageList.stream()
                 .filter(validationResponseSummary -> validationResponseSummary.getMessageId().equals(identifierValidator.getMessageId()))
                 .findFirst();
 
@@ -626,7 +628,7 @@ public class MessageTest {
                 ()-> assertEquals(identifierValidator.getMessageId(),validationResponseSummary.getMessageId()),
                 ()-> assertEquals(ServiceNames.IDENTIFIER_SERVICE,validationResponseSummary.getMicroServiceId()),
                 ()-> assertEquals(identifierValidator.getAggregatorInstance(),validationResponseSummary.getAggregatorContainerId()),
-                ()-> assertEquals(3, validationResponseSummary.getValidationResponseListCount()),
+                ()-> assertEquals(4, validationResponseSummary.getValidationResponseListCount()),
                 ()-> assertEquals(1,validationResponseAccountOptional.get().getValidationResponseCount()),
                 ()-> assertEquals(ServiceResponse.OK.getServiceResponse(),validationResponseAccountOptional.get().getValidationResponse(0)),
 
@@ -731,7 +733,7 @@ public class MessageTest {
 
 
         IdentifierValidator.Builder builder =
-                createIdentifierValidator(containerId,accountId,cardId,instrument,customerId,aggregatorInstance,
+                createIdentifierValidator(containerId,accountId,cardId,instrument,customerId,aggregatorClient.INSTANCE,
                         TransactionType.ACCOUNT_FUND_TRANSACTION,
                         InstallmentType.INSTALLMENT_TYPE,
                         CashBack.NO_CASH_BACK,
@@ -752,7 +754,7 @@ public class MessageTest {
 
         Thread.sleep(500);
 
-        Optional<ValidationResponseSummary> validationResponseSummaryOptional = validationResponseSummaryList.stream()
+        Optional<ValidationResponseSummary> validationResponseSummaryOptional = aggregatorClient.validationSummaryMessageList.stream()
                 .filter(validationResponseSummary -> validationResponseSummary.getMessageId().equals(identifierValidator.getMessageId()))
                 .findFirst();
 
@@ -782,7 +784,7 @@ public class MessageTest {
                 ()-> assertEquals(identifierValidator.getMessageId(),validationResponseSummary.getMessageId()),
                 ()-> assertEquals(ServiceNames.IDENTIFIER_SERVICE,validationResponseSummary.getMicroServiceId()),
                 ()-> assertEquals(identifierValidator.getAggregatorInstance(),validationResponseSummary.getAggregatorContainerId()),
-                ()-> assertEquals(4, validationResponseSummary.getValidationResponseListCount()),
+                ()-> assertEquals(5, validationResponseSummary.getValidationResponseListCount()),
                 ()-> assertEquals(1,validationResponseAccountOptional.get().getValidationResponseCount()),
                 ()-> assertEquals(ServiceResponse.OK.getServiceResponse(),validationResponseAccountOptional.get().getValidationResponse(0)),
 
@@ -917,7 +919,7 @@ public class MessageTest {
 
     private ProductAuthCriteria createProductAuthCriteria(Integer org, Integer product,
                                                           Integer criteria,
-                                                          IncludeExclude includeExclude, Map<PeriodicType, Map<LimitType, PeriodicCardAmount>> periodicTypeMapMap, Strategy strategy) {
+                                                          IncludeExclude includeExclude, Map<String, Map<String, PeriodicCardAmount>> periodicTypeMapMap, Strategy strategy) {
 
         ProductAuthCriteriaKey productAuthCriteriaKey = ProductAuthCriteriaKey.builder()
                 .org(org)
@@ -980,82 +982,155 @@ public class MessageTest {
                 .build());
 
 
-        ProductAuthCriteria.ProductAuthCriteriaBuilder builder =
-                ProductAuthCriteria.builder()
-                        .org(org)
-                        .product(product)
-                        .criteria(criteria)
-                        .strategy(strategy)
-                ;
+        ProductAuthCriteria productAuthCriteria  = new ProductAuthCriteria();
+        productAuthCriteria.setOrg(org);
+        productAuthCriteria.setProduct(product);
+        productAuthCriteria.setCriteria(criteria);
+        productAuthCriteria.setStrategy(strategy.getStrategy());
+
 
         if(periodicTypeMapMap != null){
-            builder.cardLimitMap(periodicTypeMapMap);
+            productAuthCriteria.setCardLimitMap(periodicTypeMapMap);
         }
 
         if (includeExclude.equals(IncludeExclude.EXCLUDE)) {
 
-            builder
-                    .blockingCountries(IncludeExclude.EXCLUDE)
-                    .countryCodesBlocked(countriesList)
-                    .blockingCurrency(IncludeExclude.EXCLUDE)
-                    .currencyCodesBlocked(currenciesList)
-                    .blockingStates(IncludeExclude.EXCLUDE)
-                    .stateCodesBlocked(new ArrayList<>())
-                    .blockingMCC(IncludeExclude.EXCLUDE)
-                    .mccBlocked(mccRangeList)
-                    .blockingLimitTypes(IncludeExclude.EXCLUDE)
-                    .limitTypesBlocked(limitTypeList)
-                    .blockingPurchaseTypes(IncludeExclude.EXCLUDE)
-                    .purchaseTypesBlocked(purchaseTypesList)
-                    .blockingBalanceTypes(IncludeExclude.EXCLUDE)
-                    .balanceTypesBlocked(blockingBalanceTypeList)
-                    .blockingTransactionTypes(IncludeExclude.EXCLUDE)
-                    .transactionTypesBlocked(blockingTransactionTypeList)
-                    .blockTerminalTypes(IncludeExclude.EXCLUDE)
-                    .terminalTypesBlocked(terminalTypeList)
-            ;
+            productAuthCriteria.setBlockingCountries(IncludeExclude.EXCLUDE.getIncludeExclude());
+            productAuthCriteria.setCountryCodesBlocked(countriesList);
+            productAuthCriteria.setBlockingCurrency(IncludeExclude.EXCLUDE.getIncludeExclude());
+            productAuthCriteria.setCurrencyCodesBlocked(currenciesList);
+            productAuthCriteria.setBlockingStates(IncludeExclude.EXCLUDE.getIncludeExclude());
+            productAuthCriteria.setStateCodesBlocked(new ArrayList<>());
+            productAuthCriteria.setBlockingMCC(IncludeExclude.EXCLUDE.getIncludeExclude());
+            productAuthCriteria.setMccBlocked(mccRangeList);
+            productAuthCriteria.setBlockingLimitTypes(IncludeExclude.EXCLUDE.getIncludeExclude());
+            productAuthCriteria.setLimitTypesBlocked(createBlockingValueLimits(limitTypeList));
+            productAuthCriteria.setBlockingPurchaseTypes(IncludeExclude.EXCLUDE.getIncludeExclude());
+            productAuthCriteria.setPurchaseTypesBlocked(createBlockingValuePurchase(purchaseTypesList));
+            productAuthCriteria.setBlockingBalanceTypes(IncludeExclude.EXCLUDE.getIncludeExclude());
+            productAuthCriteria.setBalanceTypesBlocked(createBlockingValueBalance(blockingBalanceTypeList));
+            productAuthCriteria.setBlockingTransactionTypes(IncludeExclude.EXCLUDE.getIncludeExclude());
+            productAuthCriteria.setTransactionTypesBlocked(createBlockingValueTransaction(blockingTransactionTypeList));
+            productAuthCriteria.setBlockTerminalTypes(IncludeExclude.EXCLUDE.getIncludeExclude());
+            productAuthCriteria.setTerminalTypesBlocked(createBlockingValueTerminal(terminalTypeList));
+
         } else if (includeExclude.equals(IncludeExclude.INCLUDE)) {
 
-            builder
-                    .blockingCountries(IncludeExclude.INCLUDE)
-                    .countryCodesBlocked(countriesList)
-                    .blockingCurrency(IncludeExclude.INCLUDE)
-                    .currencyCodesBlocked(currenciesList)
-                    .blockingStates(IncludeExclude.INCLUDE)
-                    .stateCodesBlocked(new ArrayList<>())
-                    .blockingMCC(IncludeExclude.INCLUDE)
-                    .mccBlocked(mccRangeList)
-                    .blockingLimitTypes(IncludeExclude.INCLUDE)
-                    .limitTypesBlocked(limitTypeList)
-                    .blockingPurchaseTypes(IncludeExclude.INCLUDE)
-                    .purchaseTypesBlocked(purchaseTypesList)
-                    .blockingBalanceTypes(IncludeExclude.INCLUDE)
-                    .balanceTypesBlocked(blockingBalanceTypeList)
-                    .blockingTransactionTypes(IncludeExclude.INCLUDE)
-                    .transactionTypesBlocked(blockingTransactionTypeList)
-                    .blockTerminalTypes(IncludeExclude.INCLUDE)
-                    .terminalTypesBlocked(terminalTypeList)
-            ;
+            productAuthCriteria.setBlockingCountries(IncludeExclude.INCLUDE.getIncludeExclude());
+            productAuthCriteria.setCountryCodesBlocked(countriesList);
+            productAuthCriteria.setBlockingCurrency(IncludeExclude.INCLUDE.getIncludeExclude());
+            productAuthCriteria.setCurrencyCodesBlocked(currenciesList);
+            productAuthCriteria.setBlockingStates(IncludeExclude.INCLUDE.getIncludeExclude());
+            productAuthCriteria.setStateCodesBlocked(new ArrayList<>());
+            productAuthCriteria.setBlockingMCC(IncludeExclude.INCLUDE.getIncludeExclude());
+            productAuthCriteria.setMccBlocked(mccRangeList);
+            productAuthCriteria.setBlockingLimitTypes(IncludeExclude.INCLUDE.getIncludeExclude());
+            productAuthCriteria.setLimitTypesBlocked(createBlockingValueLimits(limitTypeList));
+            productAuthCriteria.setBlockingPurchaseTypes(IncludeExclude.INCLUDE.getIncludeExclude());
+            productAuthCriteria.setPurchaseTypesBlocked(createBlockingValuePurchase(purchaseTypesList));
+            productAuthCriteria.setBlockingBalanceTypes(IncludeExclude.INCLUDE.getIncludeExclude());
+            productAuthCriteria.setBalanceTypesBlocked(createBlockingValueBalance(blockingBalanceTypeList));
+            productAuthCriteria.setBlockingTransactionTypes(IncludeExclude.INCLUDE.getIncludeExclude());
+            productAuthCriteria.setTransactionTypesBlocked(createBlockingValueTransaction(blockingTransactionTypeList));
+            productAuthCriteria.setBlockTerminalTypes(IncludeExclude.INCLUDE.getIncludeExclude());
+            productAuthCriteria.setTerminalTypesBlocked(createBlockingValueTerminal(terminalTypeList));
+
         } else {
 
-            builder
-                    .blockingCountries(IncludeExclude.NOT_APPLICABLE)
-                    .blockingCurrency(IncludeExclude.NOT_APPLICABLE)
-                    .blockingStates(IncludeExclude.NOT_APPLICABLE)
-                    .blockingMCC(IncludeExclude.NOT_APPLICABLE)
-                    .blockingLimitTypes(IncludeExclude.NOT_APPLICABLE)
-                    .blockingPurchaseTypes(IncludeExclude.NOT_APPLICABLE)
-                    .blockingBalanceTypes(IncludeExclude.NOT_APPLICABLE)
-                    .blockingTransactionTypes(IncludeExclude.NOT_APPLICABLE)
-                    .blockTerminalTypes(IncludeExclude.NOT_APPLICABLE)
+            productAuthCriteria.setBlockingCountries(IncludeExclude.NOT_APPLICABLE.getIncludeExclude());
+            productAuthCriteria.setBlockingCurrency(IncludeExclude.NOT_APPLICABLE.getIncludeExclude());
+            productAuthCriteria.setBlockingStates(IncludeExclude.NOT_APPLICABLE.getIncludeExclude());
+            productAuthCriteria.setBlockingMCC(IncludeExclude.NOT_APPLICABLE.getIncludeExclude());
+            productAuthCriteria.setBlockingLimitTypes(IncludeExclude.NOT_APPLICABLE.getIncludeExclude());
+            productAuthCriteria.setBlockingPurchaseTypes(IncludeExclude.NOT_APPLICABLE.getIncludeExclude());
+            productAuthCriteria.setBlockingBalanceTypes(IncludeExclude.NOT_APPLICABLE.getIncludeExclude());
+            productAuthCriteria.setBlockingTransactionTypes(IncludeExclude.NOT_APPLICABLE.getIncludeExclude());
+            productAuthCriteria.setBlockTerminalTypes(IncludeExclude.NOT_APPLICABLE.getIncludeExclude())
             ;
         }
 
-        return builder.build();
+        return productAuthCriteria;
 
 
     }
 
+
+
+    private BlockingValue createBlockingValue(String international, String value){
+
+        BlockingValue blockingValue = new BlockingValue();
+        blockingValue.setInternationalApplied(international);
+        blockingValue.setValue(value);
+        return blockingValue;
+    }
+
+
+    private List<BlockingValue> createBlockingValueLimits(List<BlockingLimitType> blockingLimitTypeList){
+
+        return blockingLimitTypeList.stream()
+                .map(blockingLimitType -> {
+                    BlockingValue blockingValue = new BlockingValue();
+                    blockingValue.setValue(blockingLimitType.getLimitType());
+                    blockingValue.setInternationalApplied(blockingLimitType.getInternationalApplied());
+                    return blockingValue;
+                })
+                .collect(Collectors.toList())
+                ;
+    }
+
+    private List<BlockingValue> createBlockingValuePurchase(List<BlockingPurchaseType> blockingPurchaseTypeList){
+
+        return blockingPurchaseTypeList.stream()
+                .map(blockingPurchaseType -> {
+                    BlockingValue blockingValue = new BlockingValue();
+                    blockingValue.setValue(blockingPurchaseType.getPurchaseTypes());
+                    blockingValue.setInternationalApplied(blockingPurchaseType.getInternationalApplied());
+                    return blockingValue;
+                })
+                .collect(Collectors.toList())
+                ;
+    }
+
+
+    private List<BlockingValue> createBlockingValueBalance(List<BlockingBalanceType> blockingBalanceTypes){
+
+        return blockingBalanceTypes.stream()
+                .map(blockingBalanceType -> {
+                    BlockingValue blockingValue = new BlockingValue();
+                    blockingValue.setValue(blockingBalanceType.getBalanceTypes());
+                    blockingValue.setInternationalApplied(blockingBalanceType.getInternationalApplied());
+                    return blockingValue;
+                })
+                .collect(Collectors.toList())
+                ;
+    }
+
+
+    private List<BlockingValue> createBlockingValueTerminal(List<BlockingTerminalType> blockingTerminalTypes){
+
+        return blockingTerminalTypes.stream()
+                .map(blockingTerminalType -> {
+                    BlockingValue blockingValue = new BlockingValue();
+                    blockingValue.setValue(blockingTerminalType.getTerminalType());
+                    blockingValue.setInternationalApplied(blockingTerminalType.getInternationalApplied());
+                    return blockingValue;
+                })
+                .collect(Collectors.toList())
+                ;
+    }
+
+    private List<BlockingValue> createBlockingValueTransaction(List<BlockingTransactionType> blockingTransactionTypes){
+
+        return blockingTransactionTypes.stream()
+                .map(blockingTransactionType -> {
+                    BlockingValue blockingValue = new BlockingValue();
+                    blockingValue.setValue(blockingTransactionType.getTransactionType());
+                    blockingValue.setInternationalApplied(blockingTransactionType.getInternationalApplied());
+                    return blockingValue;
+                })
+                .collect(Collectors.toList())
+                ;
+    }
 
     private Map<LimitType, PeriodicCardAmount> createProductTypeMap(Long amount, Integer count, double percent, List<LimitType> limitTypeList ) {
 
@@ -1190,43 +1265,6 @@ public class MessageTest {
     }
 
 
-    private void createAggregatorStream() {
-
-        aggregatorService.aggregatorStream(Multi.createFrom().emitter(multiEmitter -> {
-
-            multiEmitter.emit(createRegistrationAggregator());
-            aggregatorResponseMultiEmitter = multiEmitter;
-
-        })).subscribe().with(validationResponseSummary -> {
-
-            if(validationResponseSummary.hasRegistration()){
-
-                registrationAggregator = validationResponseSummary.getRegistration();
-
-            } else {
-                validationResponseSummaryList.add(validationResponseSummary);
-                aggregatorResponseMultiEmitter.emit(AggregatorResponse.newBuilder()
-                        .setMessageId(validationResponseSummary.getMessageId())
-                        .setCompleted(true).build());
-
-            }
-
-        })
-
-        ;
-    }
-
-    private AggregatorResponse createRegistrationAggregator(){
-
-        return AggregatorResponse.newBuilder()
-                .setMessageId(UUID.randomUUID().toString().replace("-",""))
-                .setRegistration(RegistrationAggregator.newBuilder()
-                        .setServiceName(ServiceNames.AGGREGATOR_SERVICE)
-                        .setServiceInstance(aggregatorInstance)
-                        .build())
-                .build()
-                ;
-    }
 
 
     private CurrencyConversionTable buildCurrencyTable(String sourceCurrCode, String destCurrCode, long rate, LocalDate conversionDate, NetworkType networkType){

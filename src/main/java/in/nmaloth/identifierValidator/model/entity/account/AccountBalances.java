@@ -3,6 +3,9 @@ package in.nmaloth.identifierValidator.model.entity.account;
 import org.bson.codecs.pojo.annotations.BsonProperty;
 
 public class AccountBalances {
+
+    @BsonProperty("balance_type")
+    private String balanceType;
     @BsonProperty("posted_balance")
     private long postedBalance;
     @BsonProperty("memo_db")
@@ -13,6 +16,14 @@ public class AccountBalances {
 
     public static AccountBalances.AccountBalancesBuilder builder() {
         return new AccountBalances.AccountBalancesBuilder();
+    }
+
+    public String getBalanceType() {
+        return balanceType;
+    }
+
+    public void setBalanceType(String balanceType) {
+        this.balanceType = balanceType;
     }
 
     public long getPostedBalance() {

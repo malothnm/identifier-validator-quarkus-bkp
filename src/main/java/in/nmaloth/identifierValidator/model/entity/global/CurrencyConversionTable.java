@@ -14,8 +14,6 @@ import java.util.List;
 @MongoEntity(collection = "cc_table")
 public class CurrencyConversionTable extends ReactivePanacheMongoEntity {
 
-    public ObjectId id;
-
     @BsonProperty("network")
     private String network;
 

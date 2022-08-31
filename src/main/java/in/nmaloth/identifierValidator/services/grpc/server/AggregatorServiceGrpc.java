@@ -6,9 +6,7 @@ import in.nmaloth.identifierValidator.config.EventProcessors;
 import in.nmaloth.identifierValidator.config.ServiceNames;
 import in.nmaloth.identifierValidator.listeners.MessageListener;
 import in.nmaloth.identifierValidator.listeners.MessageListenerImpl;
-import in.nmaloth.identifierValidator.model.proto.aggregator.AggregatorResponse;
-import in.nmaloth.identifierValidator.model.proto.aggregator.AggregatorService;
-import in.nmaloth.identifierValidator.model.proto.aggregator.ValidationResponseSummary;
+import in.nmaloth.identifierValidator.model.proto.aggregator.*;
 import io.quarkus.grpc.GrpcService;
 import io.smallrye.mutiny.Multi;
 import io.vertx.mutiny.core.Vertx;
@@ -16,13 +14,13 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import javax.inject.Inject;
+import java.util.UUID;
 
 @GrpcService
 public class AggregatorServiceGrpc implements AggregatorService {
 
     @Inject
     EventProcessors eventProcessors;
-
 
 
     private static final Logger logger = LoggerFactory.getLogger(AggregatorServiceGrpc.class);
@@ -41,12 +39,24 @@ public class AggregatorServiceGrpc implements AggregatorService {
 
                         eventProcessors.aggregatorProcessor.processMessage(ValidationResponseSummary.newBuilder()
                                 .setMessageId(aggregatorResponse.getMessageId())
-                                .setRegistration(in.nmaloth.identifierValidator.model.proto.aggregator.RegistrationAggregator.newBuilder()
+                                .setRegistration(RegistrationAggregator.newBuilder()
                                         .setServiceName(ServiceNames.IDENTIFIER_SERVICE)
                                         .setServiceInstance(eventProcessors.INSTANCE)
                                         .build()).build(), aggregatorResponse.getRegistration().getServiceInstance());
 
 
+                        eventProcessors.aggregatorProcessor.processMessage(ValidationResponseSummary.newBuilder()
+                                .setMessageId(UUID.randomUUID().toString().replace("-",""))
+                                .setStatusUpdateAggregator(StatusUpdateAggregator.newBuilder()
+                                        .setServiceName(ServiceNames.IDENTIFIER_SERVICE)
+                                        .setServiceInstance(eventProcessors.INSTANCE)
+                                        .setReadyStatus(true)
+                                        .build()).build(), aggregatorResponse.getRegistration().getServiceInstance());
+
+                    } else if (aggregatorResponse.hasStatusUpdateAggregator()){
+                        eventProcessors.aggregatorProcessor.updateReadyStatus(aggregatorResponse.getStatusUpdateAggregator().getServiceInstance(),
+                                aggregatorResponse.getStatusUpdateAggregator().getServiceName(),
+                                aggregatorResponse.getStatusUpdateAggregator().getReadyStatus());
                     }
                 })
                 .onFailure().invoke(throwable -> {
@@ -59,7 +69,7 @@ public class AggregatorServiceGrpc implements AggregatorService {
                     eventProcessors.aggregatorProcessor.removeRegisteredFluxListener(messageListener);
 
                 })
-                .filter(aggregatorResponse -> !aggregatorResponse.hasRegistration())
+                .filter(aggregatorResponse -> !(aggregatorResponse.hasRegistration()|| aggregatorResponse.hasStatusUpdateAggregator()))
                 .subscribe().with(aggregatorResponse -> {
 
 

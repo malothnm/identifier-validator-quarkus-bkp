@@ -9,5 +9,6 @@ public class ServiceNames {
     public static final String CONNECTOR_SERVICE = "connector";
 
     public static final String DISTRIBUTOR = "distributor";
+    public static final String ERROR = "error";
 
 }

@@ -1,6 +1,7 @@
 package in.nmaloth.identifierValidator.verticles;
 
 import in.nmaloth.identifierValidator.config.EventBusNames;
+import in.nmaloth.identifierValidator.model.IdentifierAmount;
 import in.nmaloth.identifierValidator.model.proto.aggregator.ValidationResponseSummary;
 import in.nmaloth.identifierValidator.model.proto.identifier.IdentifierValidator;
 import in.nmaloth.identifierValidator.serviceEvents.model.ServiceAction;
@@ -29,6 +30,18 @@ public class DeployVerticle {
     @ConfigProperty(name = "processor.instances")
     Optional<Integer> processorsVerticleDeployInstances;
 
+    @ConfigProperty(name = "cards.instances")
+    Optional<Integer> cardsVerticleDeployInstances;
+
+    @ConfigProperty(name = "accounts.instances")
+    Optional<Integer> accountVerticleDeployInstances;
+
+
+    @ConfigProperty(name = "customer.instances")
+    Optional<Integer> customerVerticleDeployInstances;
+
+
+
     @ConfigProperty(name = "backup.instances")
     Optional<Integer> backUpVerticleDeployInstances;
 
@@ -42,17 +55,22 @@ public class DeployVerticle {
     public void startup(@Observes StartupEvent startupEvent,
                         Instance<MessageProcessorVerticle> messageProcessorVerticles,
                         Instance<BackupVerticle> backupVerticles,
+                        Instance<CardVerticle> cardVerticles,
+                        Instance<CustomerVerticle> customerVerticles,
+                        Instance<AccountVerticle> accountVerticles,
                         ServiceEventVerticle serviceEventVerticle
 
                         ){
 
 
-        vertx1.eventBus().registerDefaultCodec(IdentifierValidator.class,new LocalEventBusCodec<IdentifierValidator>());
-        vertx1.eventBus().registerDefaultCodec(ValidationResponseSummary.class,new LocalEventBusCodec<ValidationResponseSummary>());
-        vertx1.eventBus().registerDefaultCodec(ServiceEvent.class,new LocalEventBusCodec<ServiceEvent>());
+        vertx1.eventBus().registerDefaultCodec(IdentifierValidator.class, new LocalEventBusCodec<>());
+        vertx1.eventBus().registerDefaultCodec(ValidationResponseSummary.class, new LocalEventBusCodec<>());
+        vertx1.eventBus().registerDefaultCodec(ServiceEvent.class, new LocalEventBusCodec<>());
+        vertx1.eventBus().registerDefaultCodec(IdentifierAmount.class,new LocalEventBusCodec<>());
 
 
-        vertx.deployVerticle(messageProcessorVerticles::get,new DeploymentOptions().setInstances(processorsVerticleDeployInstances.orElse(4)))
+
+        vertx.deployVerticle(messageProcessorVerticles::get,new DeploymentOptions().setInstances(processorsVerticleDeployInstances.orElse(2)))
                 .onFailure().invoke(throwable -> {
                     throwable.printStackTrace();
                     throw new RuntimeException(throwable.getMessage());
@@ -60,6 +78,37 @@ public class DeployVerticle {
                 .await().indefinitely()
         ;
         logger.info("############### deployed processor Verticle");
+
+
+
+        vertx.deployVerticle(cardVerticles::get,new DeploymentOptions().setInstances(cardsVerticleDeployInstances.orElse(2)))
+                .onFailure().invoke(throwable -> {
+                    throwable.printStackTrace();
+                    throw new RuntimeException(throwable.getMessage());
+                })
+                .await().indefinitely()
+        ;
+        logger.info("############### deployed Cards Verticle");
+
+
+        vertx.deployVerticle(accountVerticles::get,new DeploymentOptions().setInstances(accountVerticleDeployInstances.orElse(2)))
+                .onFailure().invoke(throwable -> {
+                    throwable.printStackTrace();
+                    throw new RuntimeException(throwable.getMessage());
+                })
+                .await().indefinitely()
+        ;
+        logger.info("############### deployed Account Verticle");
+
+        vertx.deployVerticle(customerVerticles::get,new DeploymentOptions().setInstances(customerVerticleDeployInstances.orElse(2)))
+                .onFailure().invoke(throwable -> {
+                    throwable.printStackTrace();
+                    throw new RuntimeException(throwable.getMessage());
+                })
+                .await().indefinitely()
+        ;
+        logger.info("############### deployed Customer Verticle");
+
 
 
 
@@ -81,6 +130,7 @@ public class DeployVerticle {
                 .await().indefinitely()
         ;
         logger.info(" ########## deployed  Service Event Verticle");
+
 
 
 

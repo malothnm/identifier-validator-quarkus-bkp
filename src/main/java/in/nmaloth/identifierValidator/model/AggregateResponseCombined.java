@@ -5,13 +5,13 @@ import in.nmaloth.identifierValidator.model.proto.aggregator.ValidationResponse;
 import java.util.List;
 
 
-public class AggregateResponse {
+public class AggregateResponseCombined {
 
     private String messageId;
-    private String serviceId;
     private List<ValidationResponse> validationResponse;
     private String messageTypeId;
     private String aggregatorContainerId;
+    private List<String> serviceCompleted;
 //    private boolean validationCompleted;
 
 
@@ -23,13 +23,6 @@ public class AggregateResponse {
         this.messageId = messageId;
     }
 
-    public String getServiceId() {
-        return serviceId;
-    }
-
-    public void setServiceId(String serviceId) {
-        this.serviceId = serviceId;
-    }
 
     public List<ValidationResponse> getValidationResponse() {
         return validationResponse;
@@ -55,4 +48,11 @@ public class AggregateResponse {
         this.aggregatorContainerId = aggregatorContainerId;
     }
 
+    public List<String> getServiceCompleted() {
+        return serviceCompleted;
+    }
+
+    public void setServiceCompleted(List<String> serviceCompleted) {
+        this.serviceCompleted = serviceCompleted;
+    }
 }

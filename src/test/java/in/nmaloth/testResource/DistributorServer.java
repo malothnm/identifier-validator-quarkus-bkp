@@ -2,10 +2,7 @@ package in.nmaloth.testResource;
 
 import in.nmaloth.identifierValidator.config.ServiceNames;
 import in.nmaloth.identifierValidator.listeners.MessageListener;
-import in.nmaloth.identifierValidator.model.proto.identifier.IdentifierResponse;
-import in.nmaloth.identifierValidator.model.proto.identifier.IdentifierValidator;
-import in.nmaloth.identifierValidator.model.proto.identifier.MutinyIdentifierServiceGrpc;
-import in.nmaloth.identifierValidator.model.proto.identifier.RegistrationIdentifier;
+import in.nmaloth.identifierValidator.model.proto.identifier.*;
 import in.nmaloth.identifierValidator.processors.EventOutgoingProcessor;
 import io.quarkus.deployment.ide.Ide;
 import io.smallrye.mutiny.Multi;
@@ -58,8 +55,20 @@ public class DistributorServer extends MutinyIdentifierServiceGrpc.IdentifierSer
                                 .setServiceName(ServiceNames.DISTRIBUTOR)
                                 .build())
                         .build();
-                eventOutgoingProcessor.processMessage(identifierValidator);
-            } else {
+                eventOutgoingProcessor.processMessage(identifierValidator, identifierResponse.getRegistration().getServiceInstance());
+
+                eventOutgoingProcessor.processMessage(IdentifierValidator.newBuilder()
+                        .setMessageId(UUID.randomUUID().toString().replace("-",""))
+                        .setStatusUpdateIdentifier(StatusUpdateIdentifier.newBuilder()
+                                .setServiceInstance(instance)
+                                .setServiceName(ServiceNames.DISTRIBUTOR)
+                                .setReadyStatus(true).build()
+                        ).build(),identifierResponse.getRegistration().getServiceInstance());
+            } else  if(identifierResponse.hasStatusUpdateIdentifier()){
+
+                eventOutgoingProcessor.updateReadyStatus(identifierResponse.getStatusUpdateIdentifier().getServiceInstance(),
+                        identifierResponse.getStatusUpdateIdentifier().getServiceName(),identifierResponse.getStatusUpdateIdentifier().getReadyStatus());
+            }else {
                 outgoingResponseList.add(identifierResponse);
             }
 

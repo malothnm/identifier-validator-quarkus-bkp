@@ -656,7 +656,15 @@ public class ParameterServiceImpl implements ParameterService {
         if (productAuthCriteria.getPurchaseTypesBlocked() != null &&
                 productAuthCriteria.getPurchaseTypesBlocked().size() > 0) {
             BlockingPurchaseType[] purchaseTypesBlocked = productAuthCriteria
-                    .getPurchaseTypesBlocked().toArray(new BlockingPurchaseType[0]);
+                    .getPurchaseTypesBlocked()
+                    .stream()
+                    .map(blockingValue -> BlockingPurchaseType.builder()
+                            .purchaseTypes(PurchaseTypes.identify(blockingValue.getValue()))
+                            .internationalApplied(InternationalApplied.identify(blockingValue.getInternationalApplied()))
+                            .build()
+                    )
+                    .toArray( BlockingPurchaseType[]:: new);
+
             Arrays.sort(purchaseTypesBlocked);
             builder.purchaseTypesBlocked(purchaseTypesBlocked);
         }
@@ -665,7 +673,15 @@ public class ParameterServiceImpl implements ParameterService {
                 productAuthCriteria.getLimitTypesBlocked().size() > 0) {
 
             BlockingLimitType[] limitTypesBlocked = productAuthCriteria
-                    .getLimitTypesBlocked().toArray(new BlockingLimitType[0]);
+                    .getLimitTypesBlocked()
+                    .stream()
+                    .map(blockingValue -> BlockingLimitType.builder()
+                            .internationalApplied(InternationalApplied.identify(blockingValue.getInternationalApplied()))
+                            .limitType(LimitType.identify(blockingValue.getValue()))
+                            .build()
+                    )
+                    .toArray(BlockingLimitType[]::new);
+
             Arrays.sort(limitTypesBlocked);
             builder.limitTypesBlocked(limitTypesBlocked);
 
@@ -674,7 +690,13 @@ public class ParameterServiceImpl implements ParameterService {
         if (productAuthCriteria.getBalanceTypesBlocked() != null
                 && productAuthCriteria.getBalanceTypesBlocked().size() > 0) {
             BlockingBalanceType[] balanceTypesBlocked = productAuthCriteria
-                    .getBalanceTypesBlocked().toArray(new BlockingBalanceType[0]);
+                    .getBalanceTypesBlocked().stream()
+                    .map(blockingValue -> BlockingBalanceType.builder()
+                            .balanceTypes(BalanceTypes.identify(blockingValue.getValue()))
+                            .internationalApplied(InternationalApplied.identify(blockingValue.getInternationalApplied()))
+                            .build()
+                    )
+                    .toArray(BlockingBalanceType[]::new);
             Arrays.sort(balanceTypesBlocked);
             builder.balanceTypesBlocked(balanceTypesBlocked);
         }
@@ -683,7 +705,14 @@ public class ParameterServiceImpl implements ParameterService {
                 productAuthCriteria.getTransactionTypesBlocked().size() > 0) {
             BlockingTransactionType[] transactionTypesBlocked = productAuthCriteria
                     .getTransactionTypesBlocked()
-                    .toArray(new BlockingTransactionType[0]);
+                    .stream()
+                    .map(blockingValue -> BlockingTransactionType.builder()
+                            .transactionType(TransactionType.identify(blockingValue.getValue()))
+                            .internationalApplied(InternationalApplied.identify(blockingValue.getInternationalApplied()))
+                            .build()
+                    )
+                    .toArray(BlockingTransactionType[]::new);
+
             Arrays.sort(transactionTypesBlocked);
             builder.transactionTypesBlocked(transactionTypesBlocked);
         }
@@ -691,8 +720,13 @@ public class ParameterServiceImpl implements ParameterService {
         if (productAuthCriteria.getTerminalTypesBlocked() != null &&
                 productAuthCriteria.getTerminalTypesBlocked().size() > 0) {
             BlockingTerminalType[] terminalTypesBlocked = productAuthCriteria
-                    .getTerminalTypesBlocked()
-                    .toArray(new BlockingTerminalType[0]);
+                    .getTerminalTypesBlocked().stream()
+                    .map(blockingValue -> BlockingTerminalType.builder()
+                            .terminalType(TerminalType.identify(blockingValue.getValue()))
+                            .internationalApplied(InternationalApplied.identify(blockingValue.getInternationalApplied()))
+                            .build()
+                    )
+                    .toArray(BlockingTerminalType[]::new);
 
             Arrays.sort(terminalTypesBlocked);
             builder.terminalTypesBlocked(terminalTypesBlocked);

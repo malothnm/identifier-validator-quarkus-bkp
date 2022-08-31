@@ -4,10 +4,14 @@ import in.nmaloth.identifierValidator.config.EventBusNames;
 import in.nmaloth.identifierValidator.config.EventProcessors;
 import in.nmaloth.identifierValidator.config.ServiceNames;
 import in.nmaloth.identifierValidator.exception.CurrencyCodeNotFoundException;
+import in.nmaloth.identifierValidator.model.AggregateResponse;
+import in.nmaloth.identifierValidator.model.AggregationKey;
+import in.nmaloth.identifierValidator.model.IdentifierAmount;
 import in.nmaloth.identifierValidator.model.ProductCriteria;
 import in.nmaloth.identifierValidator.model.proto.aggregator.ValidationResponse;
 import in.nmaloth.identifierValidator.model.proto.aggregator.ValidationResponseSummary;
 import in.nmaloth.identifierValidator.model.proto.identifier.IdentifierValidator;
+import in.nmaloth.identifierValidator.services.AggregationService;
 import in.nmaloth.identifierValidator.services.CurrencyConversionService;
 import in.nmaloth.identifierValidator.services.account.AccountServices;
 import in.nmaloth.identifierValidator.services.card.CardsService;
@@ -32,17 +36,13 @@ public class MessageProcessorVerticle extends AbstractVerticle {
     @Inject
     CurrencyConversionService currencyConversionService;
 
-    @Inject
-    CustomerService customerService;
-
-    @Inject
-    AccountServices accountServices;
 
     @Inject
     ParameterService parameterService;
 
     @Inject
-    CardsService cardsService;
+    AggregationService aggregationService;
+
 
     @Inject
     EventProcessors eventProcessors;
@@ -58,11 +58,6 @@ public class MessageProcessorVerticle extends AbstractVerticle {
 
     private void processIdentifierMessage(IdentifierValidator identifierValidator) {
 
-        ValidationResponseSummary.Builder builder = ValidationResponseSummary.newBuilder()
-                .setMessageId(identifierValidator.getMessageId())
-                .setMessageTypeId(identifierValidator.getMessageTypeId())
-                .setAggregatorContainerId(identifierValidator.getAggregatorInstance())
-                .setMicroServiceId(ServiceNames.IDENTIFIER_SERVICE);
 
         String settlementCurrencyCode = null;
         if (identifierValidator.hasSettlementCurrCode()) {
@@ -88,6 +83,11 @@ public class MessageProcessorVerticle extends AbstractVerticle {
 
             }
 
+            IdentifierAmount identifierAmount = new IdentifierAmount(identifierValidator,convertAmount);
+
+            vertx.eventBus().send(EventBusNames.CARDS,identifierAmount);
+            vertx.eventBus().send(EventBusNames.ACCOUNT,identifierAmount);
+            vertx.eventBus().send(EventBusNames.CUSTOMER,identifierValidator);
 
             Optional<ProductCriteria> productCriteriaOptional = parameterService.findCriteriaRecord(identifierValidator.getOrg(), identifierValidator.getProduct(), identifierValidator.getCriteria());
 
@@ -97,74 +97,55 @@ public class MessageProcessorVerticle extends AbstractVerticle {
 
                 if (serviceResponseList.size() == 0) {
 
-                    ValidationResponse validationResponseParameter = ValidationResponse.newBuilder()
-                            .addAllValidationResponse(List.of(ServiceResponse.OK.getServiceResponse())).build();
-
-                    Uni<ValidationResponse> cardServiceResponseUni = cardsService.validateCards(identifierValidator, productCriteria, convertAmount);
-
-                    Uni<ValidationResponse> accountServiceResponseUni = accountServices.validateAccount(identifierValidator, convertAmount);
-
-                    Uni<ValidationResponse> customerServiceResponseUni = customerService.validateCustomerService(identifierValidator);
-
-                    Uni.combine().all()
-                            .unis(cardServiceResponseUni, accountServiceResponseUni, customerServiceResponseUni)
-                            .asTuple()
-                            .subscribe().with(tuple3 -> {
-
-                                validationResponseList.add(tuple3.getItem1());
-                                validationResponseList.add(tuple3.getItem2());
-                                if(tuple3.getItem3() != null){
-                                    validationResponseList.add(tuple3.getItem3());
-                                }
-                                builder.addAllValidationResponseList(validationResponseList);
-                                ValidationResponseSummary validationResponseSummary = builder.build();
-                                eventProcessors.aggregatorProcessor.processMessage(validationResponseSummary,identifierValidator.getAggregatorInstance());
-                                vertx.eventBus().send(EventBusNames.BACKUP_CACHE, validationResponseSummary);
-
-                            });
-
+                    validationResponseList.add(ValidationResponse.newBuilder()
+                                    .setServiceId(ServiceID.PARAMETER_VALIDATOR)
+                            .addAllValidationResponse(List.of(ServiceResponse.OK.getServiceResponse()))
+                            .build());
 
                 } else {
                     // create response Message
                     ;
-                    builder.addAllValidationResponseList(List.of(ValidationResponse.newBuilder()
+                    validationResponseList.add(ValidationResponse.newBuilder()
                             .setServiceId(ServiceID.PARAMETER_VALIDATOR)
                             .addAllValidationResponse(serviceResponseList)
-                            .build()));
-
-                    ValidationResponseSummary validationResponseSummary = builder.build();
-                    eventProcessors.aggregatorProcessor.processMessage(validationResponseSummary,identifierValidator.getAggregatorInstance());
-
-                    vertx.eventBus().send(EventBusNames.BACKUP_CACHE, validationResponseSummary);
+                            .build());
 
                 }
 
             } else {
 
-                builder.addAllValidationResponseList(List.of(ValidationResponse.newBuilder()
+                validationResponseList.add(ValidationResponse.newBuilder()
                         .setServiceId(ServiceID.PARAMETER_VALIDATOR)
                         .addAllValidationResponse(List.of(ServiceResponse.NO_PRODUCT.getServiceResponse()))
-                        .build()));
-
-                ValidationResponseSummary validationResponseSummary = builder.build();
-                eventProcessors.aggregatorProcessor.processMessage(validationResponseSummary,identifierValidator.getAggregatorInstance());
-
-                vertx.eventBus().send(EventBusNames.BACKUP_CACHE, validationResponseSummary);
+                        .build());
 
             }
 
+
+            AggregateResponse aggregateResponse = new AggregateResponse();
+
+            aggregateResponse.setMessageId(identifierValidator.getMessageId());
+            aggregateResponse.setServiceId(ServiceID.PARAMETER_VALIDATOR);
+            aggregateResponse.setValidationResponse(validationResponseList);
+            aggregateResponse.setMessageTypeId(identifierValidator.getMessageId());
+            aggregateResponse.setMessageTypeId(identifierValidator.getMessageTypeId());
+            aggregateResponse.setAggregatorContainerId(identifierValidator.getAggregatorInstance());
+            aggregationService.sendAggregateResponseToProcessor(aggregateResponse);
+
         } catch (CurrencyCodeNotFoundException e) {
 
-            builder.addAllValidationResponseList(List.of(ValidationResponse.newBuilder()
+            AggregateResponse aggregateResponse = new AggregateResponse();
+            aggregateResponse.setMessageId(identifierValidator.getMessageId());
+            aggregateResponse.setServiceId(ServiceID.PARAMETER_VALIDATOR);
+
+            aggregateResponse.setValidationResponse(List.of(ValidationResponse.newBuilder()
                     .setServiceId(ServiceID.CURRENCY_CONVERSION)
                     .addAllValidationResponse(List.of(ServiceResponse.INVALID_CURRENCY_CODE.getServiceResponse()))
                     .build()));
-
-            ValidationResponseSummary validationResponseSummary = builder.build();
-            eventProcessors.aggregatorProcessor.processMessage(validationResponseSummary,identifierValidator.getAggregatorInstance());
-
-            vertx.eventBus().send(EventBusNames.BACKUP_CACHE, validationResponseSummary);
-
+            aggregateResponse.setMessageTypeId(identifierValidator.getMessageId());
+            aggregateResponse.setMessageTypeId(identifierValidator.getMessageTypeId());
+            aggregateResponse.setAggregatorContainerId(identifierValidator.getAggregatorInstance());
+            aggregationService.sendAggregateResponseToProcessor(aggregateResponse);
         }
 
 
